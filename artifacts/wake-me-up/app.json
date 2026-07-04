@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "Wake Me Up",
+    "slug": "wake-me-up",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "wake-me-up",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.wakemeup.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Wake Me Up needs your location to monitor your distance to the destination and wake you up when you arrive.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Wake Me Up needs background location access to track your journey and wake you up even when the app is in the background.",
+        "NSLocationAlwaysUsageDescription": "Wake Me Up needs background location access to track your journey and wake you up even when the app is in the background.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "package": "com.wakemeup.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Wake Me Up needs your location to monitor your distance to the destination and wake you up when you arrive.",
+          "locationAlwaysPermission": "Wake Me Up needs background location access to track your journey even when the app is in the background.",
+          "locationWhenInUsePermission": "Wake Me Up needs your location to monitor your distance to the destination.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00D4FF",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Wake Me Up"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

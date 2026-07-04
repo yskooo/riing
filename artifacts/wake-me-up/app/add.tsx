@@ -63,7 +63,7 @@ export default function AddScreen() {
           const loc = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           });
-          const userRegion: Region = {
+          const userRegion: MapRegion = {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
             latitudeDelta: 0.02,
@@ -87,7 +87,7 @@ export default function AddScreen() {
       const results = await Location.geocodeAsync(searchQuery.trim());
       if (results.length > 0) {
         const { latitude, longitude } = results[0];
-        const newRegion: Region = {
+        const newRegion: MapRegion = {
           latitude,
           longitude,
           latitudeDelta: 0.01,

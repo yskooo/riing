@@ -1,0 +1,1 @@
+- [Wake Me Up — key constraints](wake-me-up-constraints.md) — pinned react-native-maps version, expo-av deprecation warning, platform file pattern for maps

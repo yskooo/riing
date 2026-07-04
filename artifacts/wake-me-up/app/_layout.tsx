@@ -81,6 +81,13 @@ function RootLayoutNav() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="destination/[id]"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
+        }}
+      />
     </Stack>
   );
 }

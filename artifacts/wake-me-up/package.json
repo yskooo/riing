@@ -60,6 +60,8 @@
     "zustand": "^5.0.14"
   },
   "dependencies": {
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.23",
     "react-native-maps": "1.18.0"
   }
 }

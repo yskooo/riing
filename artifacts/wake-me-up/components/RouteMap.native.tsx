@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
+import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 
-import type { RouteMapProps, RouteCoord } from './RouteMap';
+import type { RouteCoord, RouteMapProps } from './RouteMap';
 
-// Same dark style used in the add screen
 const DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
@@ -23,35 +22,44 @@ const DARK_MAP_STYLE = [
 ];
 
 const PRIMARY = '#00D4FF';
-const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
 
-async function fetchOsrmRoute(from: RouteCoord, to: RouteCoord): Promise<{
-  coords: RouteCoord[];
-  durationMin: number;
-  distanceKm: number;
-} | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
+async function fetchRoute(
+  from: RouteCoord,
+  to: RouteCoord,
+  signal: AbortSignal
+): Promise<{ coords: RouteCoord[]; durationMin: number; distanceKm: number; steps: number } | null> {
+  const url = [
+    'https://router.project-osrm.org/route/v1/driving',
+    `/${from.longitude},${from.latitude}`,
+    `;${to.longitude},${to.latitude}`,
+    '?overview=full&geometries=geojson&steps=true',
+  ].join('');
 
-  try {
-    const url = `${OSRM_BASE}/${from.longitude},${from.latitude};${to.longitude},${to.latitude}?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: controller.signal });
-    const data = await res.json();
-    clearTimeout(timeout);
+  const res = await fetch(url, { signal });
+  if (!res.ok) return null;
 
-    if (!data.routes?.[0]) return null;
+  const data = (await res.json()) as {
+    code: string;
+    routes?: Array<{
+      geometry: { coordinates: [number, number][] };
+      distance: number;
+      duration: number;
+      legs: Array<{ steps: unknown[] }>;
+    }>;
+  };
 
-    const route = data.routes[0];
-    const coords: RouteCoord[] = (route.geometry.coordinates as [number, number][]).map(
-      ([lon, lat]) => ({ latitude: lat, longitude: lon })
-    );
-    const durationMin = Math.round(route.duration / 60);
-    const distanceKm = parseFloat((route.distance / 1000).toFixed(1));
-    return { coords, durationMin, distanceKm };
-  } catch {
-    clearTimeout(timeout);
-    return null;
-  }
+  if (data.code !== 'Ok' || !data.routes?.[0]) return null;
+
+  const route = data.routes[0];
+  const coords: RouteCoord[] = route.geometry.coordinates.map(([lon, lat]) => ({
+    latitude: lat,
+    longitude: lon,
+  }));
+  const durationMin = Math.round(route.duration / 60);
+  const distanceKm = parseFloat((route.distance / 1000).toFixed(1));
+  const steps = route.legs.reduce((n, leg) => n + leg.steps.length, 0);
+
+  return { coords, durationMin, distanceKm, steps };
 }
 
 export default function RouteMap({ destination, userLocation, onRouteFetched }: RouteMapProps) {
@@ -59,22 +67,17 @@ export default function RouteMap({ destination, userLocation, onRouteFetched }: 
   const [routeCoords, setRouteCoords] = useState<RouteCoord[]>([]);
   const [loading, setLoading] = useState(false);
   const didFit = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fitMap = (user?: RouteCoord | null) => {
-    const points: RouteCoord[] = [
-      { latitude: destination.latitude, longitude: destination.longitude },
-    ];
-    if (user) points.push(user);
-    if (points.length === 1) {
+    const dest = { latitude: destination.latitude, longitude: destination.longitude };
+    if (!user) {
       mapRef.current?.animateToRegion({
-        latitude: destination.latitude,
-        longitude: destination.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        ...dest, latitudeDelta: 0.025, longitudeDelta: 0.025,
       }, 600);
     } else {
-      mapRef.current?.fitToCoordinates(points, {
-        edgePadding: { top: 120, right: 60, bottom: 260, left: 60 },
+      mapRef.current?.fitToCoordinates([dest, user], {
+        edgePadding: { top: 130, right: 60, bottom: 270, left: 60 },
         animated: true,
       });
     }
@@ -82,36 +85,57 @@ export default function RouteMap({ destination, userLocation, onRouteFetched }: 
 
   useEffect(() => {
     if (!userLocation) {
-      // No user location yet — just center on destination
-      setTimeout(() => {
-        if (!didFit.current) {
-          fitMap(null);
-          didFit.current = true;
-        }
-      }, 400);
+      if (!didFit.current) {
+        setTimeout(() => { fitMap(null); didFit.current = true; }, 400);
+      }
       return;
     }
+
+    // Cancel any in-flight fetch
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     didFit.current = true;
     setLoading(true);
 
-    fetchOsrmRoute(userLocation, {
-      latitude: destination.latitude,
-      longitude: destination.longitude,
-    }).then((result) => {
-      setLoading(false);
-      if (result) {
-        setRouteCoords(result.coords);
-        onRouteFetched?.(result.durationMin, result.distanceKm);
-      } else {
-        // Straight-line fallback
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+    fetchRoute(userLocation, { latitude: destination.latitude, longitude: destination.longitude }, controller.signal)
+      .then((result) => {
+        clearTimeout(timeoutId);
+        if (controller.signal.aborted) return;
+
+        if (result) {
+          setRouteCoords(result.coords);
+          onRouteFetched?.(result.durationMin, result.distanceKm);
+        } else {
+          // Straight-line fallback
+          setRouteCoords([
+            userLocation,
+            { latitude: destination.latitude, longitude: destination.longitude },
+          ]);
+        }
+        fitMap(userLocation);
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId);
+        if (controller.signal.aborted) return;
+        // Straight-line fallback on any error
         setRouteCoords([
           userLocation,
           { latitude: destination.latitude, longitude: destination.longitude },
         ]);
-      }
-      fitMap(userLocation);
-    });
+        fitMap(userLocation);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [userLocation?.latitude, userLocation?.longitude]);
 
   return (
@@ -137,39 +161,46 @@ export default function RouteMap({ destination, userLocation, onRouteFetched }: 
           }
         }}
       >
-        {/* Route polyline — outer glow then solid line */}
+        {/* Glow + solid route polyline */}
         {routeCoords.length > 1 && (
           <>
             <Polyline
               coordinates={routeCoords}
-              strokeColor={PRIMARY + '40'}
-              strokeWidth={10}
+              strokeColor={PRIMARY + '30'}
+              strokeWidth={12}
+              lineCap="round"
+              lineJoin="round"
+            />
+            <Polyline
+              coordinates={routeCoords}
+              strokeColor={PRIMARY + '80'}
+              strokeWidth={6}
               lineCap="round"
               lineJoin="round"
             />
             <Polyline
               coordinates={routeCoords}
               strokeColor={PRIMARY}
-              strokeWidth={4}
+              strokeWidth={3}
               lineCap="round"
               lineJoin="round"
             />
           </>
         )}
 
-        {/* Perimeter circle around destination */}
+        {/* Wake-up perimeter circle */}
         <Circle
           center={{ latitude: destination.latitude, longitude: destination.longitude }}
           radius={destination.perimeter}
-          fillColor={PRIMARY + '12'}
-          strokeColor={PRIMARY + '60'}
+          fillColor={PRIMARY + '15'}
+          strokeColor={PRIMARY + '70'}
           strokeWidth={1.5}
         />
 
-        {/* Destination pin */}
+        {/* Destination marker */}
         <Marker
           coordinate={{ latitude: destination.latitude, longitude: destination.longitude }}
-          anchor={{ x: 0.5, y: 1 }}
+          anchor={{ x: 0.5, y: 0.5 }}
           title={destination.name}
         >
           <View style={styles.pin}>
@@ -178,10 +209,9 @@ export default function RouteMap({ destination, userLocation, onRouteFetched }: 
         </Marker>
       </MapView>
 
-      {/* Loading indicator */}
       {loading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator color={PRIMARY} />
+          <ActivityIndicator color={PRIMARY} size="small" />
         </View>
       )}
     </View>
@@ -190,26 +220,15 @@ export default function RouteMap({ destination, userLocation, onRouteFetched }: 
 
 const styles = StyleSheet.create({
   pin: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: PRIMARY + '30',
-    borderWidth: 2,
-    borderColor: PRIMARY,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: PRIMARY + '30', borderWidth: 2, borderColor: PRIMARY,
+    alignItems: 'center', justifyContent: 'center',
   },
-  pinInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: PRIMARY,
-  },
+  pinInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: PRIMARY },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
 });
 
-export type { RouteMapProps, RouteCoord };
+export type { RouteCoord, RouteMapProps };

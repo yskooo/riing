@@ -1,33 +1,51 @@
 ---
 name: Wake Me Up — key constraints
-description: Non-obvious decisions and gotchas for the Wake Me Up alarm app
+description: Pinned package versions, API quirks, and architectural decisions for the Wake Me Up Expo app
 ---
 
 ## react-native-maps
-- Must stay pinned at **1.18.0** — other versions crash Expo Go.
-- Do NOT add to `plugins` array in app.json (will crash).
-- Web bundler fails if react-native-maps is imported directly; use platform files: `MapPicker.native.tsx` (native), `MapPicker.tsx` (web default). Same pattern for `RouteMap`.
-
-**Why:** react-native-maps imports `codegenNativeCommands` which is native-only; Metro web bundler rejects it.
+- Pinned to `1.18.0` — only version compatible with Expo Go on SDK 54
+- Do NOT add to `app.json` plugins
+- Metro uses platform-specific files: `MapPicker.native.tsx` / `MapPicker.tsx`, `RouteMap.native.tsx` / `RouteMap.tsx`
 
 ## expo-av
-- expo-av v16 (SDK 54) is deprecated and shows a console warning. The `Audio.Sound` legacy API still works.
-- Set `playsInSilentModeIOS: true` in `Audio.setAudioModeAsync` so alarm fires in iOS silent mode.
-- The alarm WAV is at `assets/sounds/alarm.wav` — generated with Node.js (Python unavailable on Nix).
+- v16 installed (legacy `Audio.Sound` API)
+- Expected deprecation warning is safe — expo-av v16 is the correct SDK 54 version
+- Cannot use hooks in non-React services; use `Audio.Sound.createAsync` directly in `alarmService.ts`
+- `playsInSilentModeIOS: true` is required to bypass iOS silent mode
 
-**Why:** Audio must play even when phone is silenced for a reliable alarm.
+## expo-file-system
+- v19 dropped `documentDirectory` from the main TypeScript export
+- Do NOT import `FileSystem.documentDirectory` — causes TS error
+- For custom ringtone persistence: use `DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true })` and store the returned URI
+- Cache URIs can be evicted by OS — `alarmService.ts` has a fallback to `classic` preset if the custom URI fails
 
-## Platform-specific component files
-- TypeScript resolves the base file (no platform suffix). Metro resolves `.native.tsx` on native, `.tsx` on web.
-- Pattern: `Component.tsx` (web stub + TypeScript types), `Component.native.tsx` (native implementation that imports types from the base file).
+## expo-document-picker
+- v14 for SDK 54 (was wrongly installed as v57 — fixed via `pnpm exec expo install`)
+- Result shape: `{ canceled: boolean, assets: Array<{ uri, name, size, ... }> }`
 
-## Background location
-- Background tracking requires a dev build; foreground works in Expo Go.
-- Background task (`wake-me-up-background-location`) must be imported at module level in `_layout.tsx`.
-- When alarm fires in background task: remove AsyncStorage key AND stop location updates to prevent battery drain + repeat alarms.
+## Notification channel (Android)
+- Channel ID `wake-me-up-alarm` created in `app/_layout.tsx` via `Notifications.setNotificationChannelAsync`
+- Channel config: `MAX` importance, `bypassDnd: true`, strong vibration pattern
+- Notifications MUST specify `{ channelId: ALARM_CHANNEL_ID }` as trigger on Android (done in `locationTask.ts`)
+- On iOS: use `trigger: null` (immediate fire, no channel concept)
 
-## Navigation
-- Destination detail screen: `app/destination/[id].tsx` — uses OSRM free routing API for route polyline.
-- OSRM endpoint: `https://router.project-osrm.org/route/v1/driving/{lon},{lat};{lon},{lat}?overview=full&geometries=geojson`
-- OSRM returns `[longitude, latitude]` pairs — must swap to `{latitude, longitude}` for react-native-maps.
-- 6-second timeout on OSRM fetch; falls back to straight-line polyline.
+## Navigation deep links
+- iOS: `maps://?daddr=lat,lon` (canonical Apple Maps URL) with Google Maps web fallback
+- Android: `google.navigation:q=lat,lon&mode=r` (Google Maps app) with Google Maps web fallback
+
+## OSRM routing
+- Free, no API key: `router.project-osrm.org/route/v1/driving`
+- 10s timeout with straight-line fallback
+- `?overview=full&geometries=geojson&steps=true` for road-following polyline + step count
+- Abort controller cleans up on component unmount and when userLocation changes
+
+## Store shape
+- `selectedRingtone: RingtoneOption` persisted via AsyncStorage (in `partialize`)
+- Type: `PresetRingtone | CustomRingtone` — defined in `constants/ringtones.ts`
+- `PRESET_SOURCES` typed as `Record<RingtonePreset, number>` (Metro `require()` returns numbers in RN)
+
+## Background task
+- Task name: `wake-me-up-background-location`
+- Active destination stored in AsyncStorage key `wake-me-up-active-destination`
+- Task self-terminates after alarm fires (removes key + stops location updates)

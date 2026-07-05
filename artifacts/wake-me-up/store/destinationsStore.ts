@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { DEFAULT_RINGTONE, type RingtoneOption } from '@/constants/ringtones';
+
 export interface Destination {
   id: string;
   name: string;
@@ -22,6 +24,7 @@ interface DestinationsState {
   activeTracking: TrackingInfo | null;
   alarmTriggered: boolean;
   alarmDestinationName: string | null;
+  selectedRingtone: RingtoneOption;
   // Actions
   addDestination: (d: Omit<Destination, 'id'>) => void;
   removeDestination: (id: string) => void;
@@ -30,15 +33,17 @@ interface DestinationsState {
   updateTracking: (info: TrackingInfo) => void;
   triggerAlarm: (name: string) => void;
   dismissAlarm: () => void;
+  setRingtone: (ringtone: RingtoneOption) => void;
 }
 
 export const useDestinationsStore = create<DestinationsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       destinations: [],
       activeTracking: null,
       alarmTriggered: false,
       alarmDestinationName: null,
+      selectedRingtone: DEFAULT_RINGTONE,
 
       addDestination: (d) =>
         set((state) => ({
@@ -55,9 +60,7 @@ export const useDestinationsStore = create<DestinationsState>()(
         set((state) => ({
           destinations: state.destinations.filter((d) => d.id !== id),
           activeTracking:
-            state.activeTracking?.destinationId === id
-              ? null
-              : state.activeTracking,
+            state.activeTracking?.destinationId === id ? null : state.activeTracking,
         })),
 
       startTracking: (id) =>
@@ -78,17 +81,18 @@ export const useDestinationsStore = create<DestinationsState>()(
         set({ alarmTriggered: true, alarmDestinationName: name }),
 
       dismissAlarm: () =>
-        set({
-          alarmTriggered: false,
-          alarmDestinationName: null,
-          activeTracking: null,
-        }),
+        set({ alarmTriggered: false, alarmDestinationName: null, activeTracking: null }),
+
+      setRingtone: (ringtone) => set({ selectedRingtone: ringtone }),
     }),
     {
       name: 'wake-me-up-destinations',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist destinations list, not runtime tracking state
-      partialize: (state) => ({ destinations: state.destinations }),
+      // Persist destinations + ringtone preference, not runtime tracking state
+      partialize: (state) => ({
+        destinations: state.destinations,
+        selectedRingtone: state.selectedRingtone,
+      }),
     }
   )
 );

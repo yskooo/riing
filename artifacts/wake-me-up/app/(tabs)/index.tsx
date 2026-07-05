@@ -307,15 +307,27 @@ export default function HomeScreen() {
             {destinations.length === 0 ? 'No destinations' : `${destinations.length} saved`}
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push('/add');
-          }}
-          style={[styles.addBtn, { backgroundColor: colors.primary }]}
-        >
-          <Ionicons name="add" size={22} color={colors.primaryForeground} />
-        </TouchableOpacity>
+        <View style={styles.headerBtns}>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/settings');
+            }}
+            style={[styles.headerIconBtn, { backgroundColor: colors.secondary }]}
+            hitSlop={6}
+          >
+            <Ionicons name="musical-note" size={18} color={colors.mutedForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/add');
+            }}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+          >
+            <Ionicons name="add" size={22} color={colors.primaryForeground} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Active tracking card */}
@@ -384,6 +396,8 @@ const styles = StyleSheet.create({
   },
   appName: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 2, marginBottom: 4 },
   headerTitle: { fontSize: 26, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerIconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   addBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 
   // Tracking card

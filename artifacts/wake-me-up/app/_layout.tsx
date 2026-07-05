@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -14,6 +15,8 @@ import {
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+
+import { ALARM_CHANNEL_ID } from '@/tasks/locationTask';
 
 // Register background location task (must be imported at top level)
 import '@/tasks/locationTask';
@@ -38,6 +41,20 @@ Notifications.setNotificationHandler({
 
 function RootLayoutNav() {
   const alarmTriggered = useDestinationsStore((s) => s.alarmTriggered);
+
+  // Set up Android alarm notification channel on mount
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
+      name: 'Wake Me Up Alarm',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 200, 500, 200, 500, 200, 500],
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      showBadge: false,
+      bypassDnd: true,
+    }).catch(console.warn);
+  }, []);
 
   // Navigate to alarm screen when alarm is triggered from foreground tracking
   useEffect(() => {
@@ -86,6 +103,14 @@ function RootLayoutNav() {
         options={{
           headerShown: false,
           animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="settings"
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
         }}
       />
     </Stack>
